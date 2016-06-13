@@ -1,0 +1,70 @@
+---
+title: "Weight Lifting Method Predictor"
+author: "Robb Fritz"
+date: "June 11, 2016"
+output: html_document
+---
+##Goal of Project
+In this project, we will be making use of practical machine learning to predict as accurately as possible the manner in which a particular form of exercise was performed. The set of data to be analyzed is the Weight Lifting Exercises Dataset. This dataset was taken from the analysis of six young participants who each performed one set of 10 repetitions in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). The goal is to produce a proper model to predict which class of exercise was performed based on the predictors provided in the dataset. 
+
+Libraries to be included:
+```{r}
+library(caret)
+```
+  
+##Preparation of Training Dataset
+The dataset as provided has already been broken into a training and a test set. As the set is large, it will be helpful to do a preliminary trimming out of all variables that by and large reflect missing data in the original training set.
+```{r}
+main.training <- read.csv('pml-training.csv', na.strings = c("", " ", "NA"))
+main.training <- main.training[,complete.cases(t(main.training))]
+testing <- read.csv('pml-testing.csv', na.strings = c('', ' ', 'NA'))
+testing <- testing[,complete.cases(t(testing))]
+```
+
+In addition, it will help to remove a number of variables - user names, timestamps and more - namely the first 6 columns of the dataset ("X", "user_name", three timestamps, and "num_window"") - that are concerned with sample identification and will only confuse prediction, which should be based solely on performance metrics.
+```{r}
+main.training <- main.training[,-c(1:6)]
+```
+ 
+##Near Zero Variables
+Running a near zero variable analysis on the revised dataset indicates that, in fact, none of the remaining variables are near zero.
+```{r}
+nzv <- nearZeroVar(main.training, saveMetrics = TRUE)
+nrow(nzv[nzv$zeroVar==TRUE,])
+```
+For this reason, I will include all 52 remaining variables - besides the outcome variable "classe" - in the initial model.
+ 
+##Cross Validation
+To facilitate cross validation, I will partition the main training set into training and validation subsets.
+```{r}
+set.seed(12345)
+inTrain <- createDataPartition(main.training$classe, p=.7, list=FALSE)
+training <- main.training[inTrain,]
+validation <- main.training[-inTrain,]
+```
+The training subset will now be used to train the model.
+  
+##Training the Model
+The model will be created through boosting using the gbm (gradient boosting machine) library. In addition, I will make use of k-fold cross validation with ten folds on the training set.
+```{r, results="hide"} 
+mod1 <- train(classe ~ ., data = training, method = 'gbm', trControl = trainControl('cv', number = 10))
+```
+
+##Testing the Model with the Validation Set
+The accuracy of the model can be tested on the validation set.
+
+```{r}
+result <- confusionMatrix(validation$classe, predict(mod1, validation))
+result
+```
+
+As can be seen, when used to predict the validation set, the model yields an overall accuracy of `r paste(round(result$overall[1]*100,digits=2),"%",sep="")` and a kappa of `r paste(round(result$overall[2]*100,digits=2),"%",sep="")`. This is a highly accurate result, providing a strong indication of a similar out of sample error. 
+
+##Predicting the Test Set
+Finally, I apply the model to the assigned testing set. 
+```{r}
+finaltest <- predict(mod1, testing)
+finaltest
+````
+
+These final results will be submitted in the Course Project Prediction Quiz.
